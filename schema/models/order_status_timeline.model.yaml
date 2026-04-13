@@ -1,0 +1,217 @@
+# =============================================================================
+# Module: Orders
+# Entity: OrderStatusTimeline
+# Description: Immutable status history for orders
+# =============================================================================
+
+external_imports:
+  - module: sapiens
+    types: [User]
+
+# =============================================================================
+# Enums
+# =============================================================================
+
+enums:
+  - name: TimelineEntryType
+    description: "Type of timeline entry"
+    variants:
+      - name: status_change
+        description: "Status changed"
+        default: true
+      - name: note
+        description: "Note added"
+      - name: assignment
+        description: "Assignment change"
+      - name: location
+        description: "Location update"
+      - name: communication
+        description: "Customer communication"
+      - name: action
+        description: "Action taken"
+      - name: system
+        description: "System event"
+
+# =============================================================================
+# Models
+# =============================================================================
+
+models:
+  - name: OrderStatusTimeline
+    collection: order_status_timelines
+    soft_delete: false
+    description: "Immutable order status history"
+    config:
+      generators:
+        disabled: [handler, usecase, cqrs, projection, bulk-operations]
+
+    fields:
+      id:
+        type: uuid
+        attributes: ["@id", "@default(uuid)"]
+        description: "Unique timeline entry identifier"
+
+      order_id:
+        type: uuid
+        attributes: ["@required", "@foreign_key(Order.id)"]
+        description: "Order reference"
+
+      # =======================================================================
+      # Entry Type
+      # =======================================================================
+      entry_type:
+        type: TimelineEntryType
+        attributes: ["@default(status_change)"]
+        description: "Type of entry"
+
+      # =======================================================================
+      # Status Change
+      # =======================================================================
+      from_status:
+        type: string?
+        attributes: ["@max(30)"]
+        description: "Previous status"
+
+      to_status:
+        type: string?
+        attributes: ["@max(30)"]
+        description: "New status"
+
+      # =======================================================================
+      # Timestamp
+      # =======================================================================
+      occurred_at:
+        type: datetime
+        attributes: ["@required"]
+        description: "When this occurred"
+
+      # =======================================================================
+      # Actor
+      # =======================================================================
+      actor_type:
+        type: string?
+        attributes: ["@max(20)"]
+        description: "Actor type (user, agent, customer, system)"
+
+      actor_id:
+        type: uuid?
+        attributes: ["@foreign_key(sapiens.User.id)"]
+        description: "Actor ID"
+
+      actor_name:
+        type: string?
+        attributes: ["@max(100)"]
+        description: "Actor name"
+
+      actor_role:
+        type: string?
+        attributes: ["@max(50)"]
+        description: "Actor role"
+
+      # =======================================================================
+      # Description
+      # =======================================================================
+      title:
+        type: string
+        attributes: ["@required", "@max(100)"]
+        description: "Event title"
+
+      description:
+        type: string?
+        attributes: ["@max(500)"]
+        description: "Event description"
+
+      # =======================================================================
+      # Location
+      # =======================================================================
+      latitude:
+        type: float?
+        description: "Location latitude"
+
+      longitude:
+        type: float?
+        description: "Location longitude"
+
+      location_name:
+        type: string?
+        attributes: ["@max(255)"]
+        description: "Location name"
+
+      # =======================================================================
+      # Visibility
+      # =======================================================================
+      is_customer_visible:
+        type: bool
+        attributes: ["@default(true)"]
+        description: "Visible to customer"
+
+      is_provider_visible:
+        type: bool
+        attributes: ["@default(true)"]
+        description: "Visible to provider"
+
+      is_agent_visible:
+        type: bool
+        attributes: ["@default(true)"]
+        description: "Visible to agent"
+
+      # =======================================================================
+      # Attachments
+      # =======================================================================
+      attachments:
+        type: json
+        attributes: ["@default('[]')"]
+        description: "Attached files/images"
+
+      # =======================================================================
+      # Duration
+      # =======================================================================
+      duration_minutes:
+        type: int?
+        attributes: ["@non_negative"]
+        description: "Duration at this status"
+
+      # =======================================================================
+      # Device/Channel
+      # =======================================================================
+      channel:
+        type: string?
+        attributes: ["@max(30)"]
+        description: "Channel (app, web, api, system)"
+
+      device_info:
+        type: json
+        attributes: ["@default('{}')"]
+        description: "Device information"
+
+      ip_address:
+        type: string?
+        attributes: ["@max(45)"]
+        description: "IP address"
+
+      metadata:
+        type: Metadata
+        attributes: ["@audit_metadata"]
+        description: "Audit metadata (created_at, updated_at, deleted_at, created_by, updated_by, deleted_by)"
+
+    relations:
+      order:
+        type: Order
+        attributes: ["@one", "@foreign_key(order_id)"]
+        description: "Order"
+        inverse: status_timeline
+
+      actor:
+        type: sapiens.User?
+        attributes: ["@one", "@foreign_key(actor_id)"]
+        description: "Actor user"
+
+    indexes:
+      - type: index
+        fields: [order_id, occurred_at]
+      - type: index
+        fields: [order_id, entry_type]
+      - type: index
+        fields: [order_id, to_status]
+      - type: index
+        fields: [actor_id, occurred_at]

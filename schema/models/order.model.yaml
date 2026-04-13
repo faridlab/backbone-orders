@@ -1,0 +1,399 @@
+# =============================================================================
+# Domain: Orders
+# Entities: Order, OrderItem, OrderPickup, OrderDelivery, OrderStatusTimeline
+# Description: Order management with 18-state workflow
+# =============================================================================
+
+external_imports:
+  - module: sapiens
+    types: [User]
+
+models:
+  # ---------------------------------------------------------------------------
+  # Order - Main order entity with 18-state workflow
+  # ---------------------------------------------------------------------------
+  - name: Order
+    collection: orders
+    description: "Main order entity with complete workflow state machine"
+
+    fields:
+      id:
+        type: uuid
+        attributes: ["@id", "@default(uuid)"]
+        description: "Unique order identifier"
+
+      order_number:
+        type: string
+        attributes: ["@required", "@unique", "@max(30)"]
+        description: "Human-readable order number (INV/YYYYMMDD/XXXXX)"
+
+      # =======================================================================
+      # Relationships
+      # =======================================================================
+      # logical FK to bersihir.Customer.id
+      customer_id:
+        type: uuid
+        attributes: ["@required", "@exclude_from_foreign_key_check"]
+        description: "Customer who placed the order"
+
+      # logical FK to bersihir.Provider.id
+      provider_id:
+        type: uuid
+        attributes: ["@required", "@exclude_from_foreign_key_check"]
+        description: "Provider handling the order"
+
+      # logical FK to bersihir.ProviderOutlet.id
+      outlet_id:
+        type: uuid?
+        attributes: ["@exclude_from_foreign_key_check"]
+        description: "Specific outlet (if applicable)"
+
+      # logical FK to corporate.CorporateOrder.id
+      corporate_order_id:
+        type: uuid?
+        attributes: ["@exclude_from_foreign_key_check"]
+        description: "Parent corporate order (if B2B)"
+
+      delivery_tier_id:
+        type: uuid?
+        attributes: ["@foreign_key(DeliveryTier.id)"]
+        description: "Selected delivery speed tier (Regular, Express, Kilat, Sihir)"
+
+      # =======================================================================
+      # Order Type and Status
+      # =======================================================================
+      order_type:
+        type: OrderType
+        attributes: ["@required", "@default(kiloan)"]
+        description: "Type of laundry service"
+
+      status:
+        type: OrderStatus
+        attributes: ["@default(pending)"]
+        description: "Current order status (18-state workflow)"
+
+      fulfillment_method:
+        type: FulfillmentMethod
+        attributes: ["@default(pickup_delivery)"]
+        description: "How order is fulfilled"
+
+      # =======================================================================
+      # SLA Estimation
+      # =======================================================================
+      estimated_ready_at:
+        type: datetime?
+        description: "Estimated ready for delivery time"
+
+      actual_ready_at:
+        type: datetime?
+        description: "Actual ready for delivery time"
+
+      # =======================================================================
+      # Pricing
+      # =======================================================================
+      currency:
+        type: string
+        attributes: ["@default('IDR')", "@length(3)"]
+        description: "Currency code"
+
+      subtotal:
+        type: decimal
+        attributes: ["@required", "@precision(14,2)", "@non_negative"]
+        description: "Subtotal before discounts"
+
+      discount_amount:
+        type: decimal
+        attributes: ["@default(0)", "@precision(12,2)", "@non_negative"]
+        description: "Total discount amount"
+
+      # logical FK to bersihir.ProviderPromo.id
+      promo_id:
+        type: uuid?
+        attributes: ["@exclude_from_foreign_key_check"]
+        description: "Applied promo"
+
+      delivery_fee:
+        type: decimal
+        attributes: ["@default(0)", "@precision(10,2)", "@non_negative"]
+        description: "Delivery fee"
+
+      pickup_fee:
+        type: decimal
+        attributes: ["@default(0)", "@precision(10,2)", "@non_negative"]
+        description: "Pickup fee"
+
+      tax_amount:
+        type: decimal
+        attributes: ["@default(0)", "@precision(12,2)", "@non_negative"]
+        description: "Tax amount (if applicable)"
+
+      platform_fee:
+        type: decimal
+        attributes: ["@default(0)", "@precision(10,2)", "@non_negative"]
+        description: "Platform commission (includes transaction fee)"
+
+      grand_total:
+        type: decimal
+        attributes: ["@required", "@precision(14,2)", "@non_negative"]
+        description: "Final amount to pay"
+
+      # =======================================================================
+      # Payment Summary
+      # =======================================================================
+      payment_status:
+        type: PaymentStatus
+        attributes: ["@default(pending)"]
+        description: "Payment status"
+
+      paid_amount:
+        type: decimal
+        attributes: ["@default(0)", "@precision(14,2)", "@non_negative"]
+        description: "Amount paid so far"
+
+      paid_at:
+        type: datetime?
+        description: "Payment completion timestamp"
+
+      # =======================================================================
+      # Notes
+      # =======================================================================
+      special_instructions:
+        type: string?
+        attributes: ["@max(1000)"]
+        description: "Special instructions from customer (fragrance, folding, etc.)"
+
+      provider_notes:
+        type: string?
+        attributes: ["@max(1000)"]
+        description: "Internal notes from provider (includes quality notes)"
+
+      # =======================================================================
+      # Cancellation
+      # =======================================================================
+      cancelled_at:
+        type: datetime?
+        description: "Cancellation timestamp"
+
+      cancellation_reason:
+        type: CancellationReason?
+        description: "Reason for cancellation"
+
+      cancellation_note:
+        type: string?
+        attributes: ["@max(500)"]
+        description: "Cancellation explanation"
+
+      cancelled_by:
+        type: uuid?
+        description: "User who cancelled"
+
+      # =======================================================================
+      # Denormalized stats (JSONB)
+      # =======================================================================
+      data:
+        type: json
+        attributes: ["@default('{\"total_items\":0,\"total_weight_kg\":null,\"actual_weight_kg\":null,\"is_recurring\":false,\"is_overflow\":false,\"points_earned\":0,\"points_redeemed\":0,\"points_discount\":0}')"]
+        description: "Denormalized stats/flags: total_items, total_weight_kg, actual_weight_kg, is_recurring, is_overflow, points_earned, points_redeemed, points_discount"
+
+      # Source tracking
+      source:
+        type: string?
+        attributes: ["@max(50)"]
+        description: "Order source (app, web, whatsapp)"
+
+      metadata:
+        type: Metadata
+        attributes: ["@audit_metadata"]
+        description: "Audit metadata (created_at, updated_at, deleted_at, created_by, updated_by, deleted_by)"
+
+    relations:
+      delivery_tier:
+        type: DeliveryTier?
+        attributes: ["@one", "@foreign_key(delivery_tier_id)", "@on_delete(set_null)"]
+        description: "Selected delivery speed tier"
+        inverse: orders
+
+      items:
+        type: OrderItem[]
+        attributes: ["@one_to_many", "@on_delete(cascade)", "@on_update(cascade)"]
+        description: "Order items"
+        inverse: order
+
+      pickup:
+        type: OrderPickup?
+        attributes: ["@one", "@on_delete(cascade)"]
+        description: "Pickup details"
+        inverse: order
+
+      delivery:
+        type: OrderDelivery?
+        attributes: ["@one", "@on_delete(cascade)"]
+        description: "Delivery details"
+        inverse: order
+
+      status_timeline:
+        type: OrderStatusTimeline[]
+        attributes: ["@one_to_many", "@on_delete(cascade)", "@on_update(cascade)"]
+        description: "Status history"
+        inverse: order
+
+      cancelled_by_user:
+        type: sapiens.User?
+        attributes: ["@one", "@foreign_key(cancelled_by)", "@on_delete(set_null)"]
+        description: "User who cancelled"
+
+    indexes:
+      - type: unique
+        fields: [order_number]
+        where: "deleted_at IS NULL"
+      - type: index
+        fields: [customer_id, status]
+      - type: index
+        fields: [provider_id, status]
+      - type: index
+        fields: [provider_id, outlet_id, status]
+      - type: index
+        fields: [status, created_at]
+      - type: index
+        fields: [payment_status]
+      - type: index
+        fields: [delivery_tier_id]
+      - type: index
+        fields: [corporate_order_id]
+        where: "corporate_order_id IS NOT NULL"
+
+# =============================================================================
+# Enums
+# =============================================================================
+
+enums:
+  # ---------------------------------------------------------------------------
+  # Order Status - 18 State Workflow
+  # ---------------------------------------------------------------------------
+  - name: OrderStatus
+    description: "Complete 18-state order workflow"
+    variants:
+      # Initial states
+      - name: pending
+        description: "Order created, awaiting confirmation"
+        default: true
+      - name: confirmed
+        description: "Order confirmed by provider"
+      # Pickup phase
+      - name: pickup_scheduled
+        description: "Pickup scheduled"
+      - name: pickup_in_progress
+        description: "Agent en route for pickup"
+      - name: picked_up
+        description: "Items picked up from customer"
+      - name: received
+        description: "Items received at provider outlet"
+      # Processing phase
+      - name: queue_washing
+        description: "In queue for washing"
+      - name: washing
+        description: "Currently washing"
+      - name: drying
+        description: "Currently drying"
+      - name: queue_ironing
+        description: "In queue for ironing"
+      - name: ironing
+        description: "Currently ironing"
+      - name: quality_check
+        description: "Quality inspection"
+      - name: packing
+        description: "Being packed"
+      - name: ready
+        description: "Ready for delivery/pickup"
+      # Delivery phase
+      - name: delivery_scheduled
+        description: "Delivery scheduled"
+      - name: delivery_in_progress
+        description: "Agent en route for delivery"
+      - name: delivered
+        description: "Items delivered to customer"
+      # Final states
+      - name: completed
+        description: "Order completed successfully"
+      - name: cancelled
+        description: "Order cancelled"
+
+  # ---------------------------------------------------------------------------
+  # Order Type
+  # ---------------------------------------------------------------------------
+  - name: OrderType
+    description: "Type of laundry service"
+    variants:
+      - name: kiloan
+        description: "Per-kilogram pricing"
+        default: true
+      - name: satuan
+        description: "Per-piece pricing"
+      - name: dry_clean
+        description: "Dry cleaning"
+      - name: express
+        description: "Express service (faster)"
+      - name: same_day
+        description: "Same day service"
+      - name: specialty
+        description: "Specialty items (curtains, carpet, etc.)"
+
+  # ---------------------------------------------------------------------------
+  # Fulfillment Method
+  # ---------------------------------------------------------------------------
+  - name: FulfillmentMethod
+    description: "How order is fulfilled"
+    variants:
+      - name: pickup_delivery
+        description: "Full pickup and delivery service"
+        default: true
+      - name: pickup_only
+        description: "Pickup only, customer picks up"
+      - name: delivery_only
+        description: "Customer drops off, delivery only"
+      - name: drop_off
+        description: "Customer handles both (drop-off/pickup)"
+
+  # ---------------------------------------------------------------------------
+  # Payment Status
+  # ---------------------------------------------------------------------------
+  - name: PaymentStatus
+    description: "Order payment status"
+    variants:
+      - name: pending
+        description: "Awaiting payment"
+        default: true
+      - name: awaiting_payment
+        description: "Payment link sent"
+      - name: paid
+        description: "Fully paid"
+      - name: partially_paid
+        description: "Deposit paid"
+      - name: refunded
+        description: "Refunded"
+      - name: failed
+        description: "Payment failed"
+
+  # ---------------------------------------------------------------------------
+  # Cancellation Reason
+  # ---------------------------------------------------------------------------
+  - name: CancellationReason
+    description: "Reason for order cancellation"
+    variants:
+      - name: customer_request
+        description: "Customer requested cancellation"
+        default: true
+      - name: provider_unavailable
+        description: "Provider unavailable"
+      - name: no_pickup_response
+        description: "No response during pickup"
+      - name: no_delivery_response
+        description: "No response during delivery"
+      - name: payment_failed
+        description: "Payment failed"
+      - name: item_issue
+        description: "Issue with items"
+      - name: force_majeure
+        description: "Force majeure"
+      - name: other
+        description: "Other reason"

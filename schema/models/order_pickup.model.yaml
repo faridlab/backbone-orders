@@ -1,0 +1,360 @@
+# =============================================================================
+# Module: Orders
+# Entity: OrderPickup
+# Description: Pickup details and proof for orders
+# =============================================================================
+
+external_imports:
+  - module: sapiens
+    types: [User]
+
+# =============================================================================
+# Enums
+# =============================================================================
+
+enums:
+  - name: PickupStatus
+    description: "Pickup status"
+    variants:
+      - name: scheduled
+        description: "Pickup scheduled"
+        default: true
+      - name: assigned
+        description: "Agent assigned"
+      - name: en_route
+        description: "Agent en route"
+      - name: arrived
+        description: "Agent arrived"
+      - name: in_progress
+        description: "Pickup in progress"
+      - name: completed
+        description: "Pickup completed"
+      - name: failed
+        description: "Pickup failed"
+      - name: rescheduled
+        description: "Rescheduled"
+      - name: cancelled
+        description: "Cancelled"
+
+  - name: PickupType
+    description: "Type of pickup"
+    variants:
+      - name: scheduled
+        description: "Scheduled pickup"
+        default: true
+      - name: on_demand
+        description: "On-demand pickup"
+      - name: drop_off
+        description: "Customer drop-off"
+
+# =============================================================================
+# Models
+# =============================================================================
+
+models:
+  - name: OrderPickup
+    collection: order_pickups
+    description: "Order pickup details"
+    config:
+      generators:
+        disabled: [handler, usecase, cqrs, projection, bulk-operations]
+
+    fields:
+      id:
+        type: uuid
+        attributes: ["@id", "@default(uuid)"]
+        description: "Unique pickup identifier"
+
+      order_id:
+        type: uuid
+        attributes: ["@required", "@foreign_key(Order.id)"]
+        description: "Order reference"
+
+      # =======================================================================
+      # Type
+      # =======================================================================
+      pickup_type:
+        type: PickupType
+        attributes: ["@default(scheduled)"]
+        description: "Type of pickup"
+
+      # =======================================================================
+      # Schedule
+      # =======================================================================
+      scheduled_date:
+        type: date
+        attributes: ["@required"]
+        description: "Scheduled pickup date"
+
+      scheduled_time_start:
+        type: string?
+        attributes: ["@max(5)"]
+        description: "Scheduled time start (HH:MM)"
+
+      scheduled_time_end:
+        type: string?
+        attributes: ["@max(5)"]
+        description: "Scheduled time end (HH:MM)"
+
+      time_slot:
+        type: string?
+        attributes: ["@max(30)"]
+        description: "Time slot name"
+
+      # =======================================================================
+      # Customer Requested Schedule
+      # =======================================================================
+      customer_requested_date:
+        type: date?
+        description: "Customer originally requested pickup date"
+
+      customer_requested_time_start:
+        type: string?
+        attributes: ["@max(5)"]
+        description: "Customer requested pickup time start (HH:MM)"
+
+      customer_requested_time_end:
+        type: string?
+        attributes: ["@max(5)"]
+        description: "Customer requested pickup time end (HH:MM)"
+
+      # =======================================================================
+      # Address
+      # =======================================================================
+      # logical FK to bersihir.Address.id
+      address_id:
+        type: uuid?
+        attributes: ["@exclude_from_foreign_key_check"]
+        description: "Customer address reference"
+
+      address_line:
+        type: string
+        attributes: ["@required", "@max(255)"]
+        description: "Pickup address"
+
+      address_detail:
+        type: string?
+        attributes: ["@max(255)"]
+        description: "Address details (unit, floor)"
+
+      landmark:
+        type: string?
+        attributes: ["@max(100)"]
+        description: "Nearby landmark"
+
+      latitude:
+        type: float?
+        description: "Pickup latitude"
+
+      longitude:
+        type: float?
+        description: "Pickup longitude"
+
+      # =======================================================================
+      # Contact
+      # =======================================================================
+      contact_name:
+        type: string
+        attributes: ["@required", "@max(100)"]
+        description: "Contact person name"
+
+      contact_phone:
+        type: string
+        attributes: ["@required", "@max(20)"]
+        description: "Contact phone"
+
+      contact_phone_alt:
+        type: string?
+        attributes: ["@max(20)"]
+        description: "Alternative phone"
+
+      # =======================================================================
+      # Agent Assignment
+      # =======================================================================
+      # logical FK to bersihir.Agent.id
+      agent_id:
+        type: uuid?
+        attributes: ["@exclude_from_foreign_key_check"]
+        description: "Assigned agent"
+
+      agent_name:
+        type: string?
+        attributes: ["@max(100)"]
+        description: "Agent name"
+
+      agent_phone:
+        type: string?
+        attributes: ["@max(20)"]
+        description: "Agent phone"
+
+      assigned_at:
+        type: datetime?
+        description: "Assignment timestamp"
+
+      # =======================================================================
+      # Status
+      # =======================================================================
+      status:
+        type: PickupStatus
+        attributes: ["@default(scheduled)"]
+        description: "Pickup status"
+
+      # =======================================================================
+      # Timestamps
+      # =======================================================================
+      en_route_at:
+        type: datetime?
+        description: "Agent started route"
+
+      arrived_at:
+        type: datetime?
+        description: "Agent arrived"
+
+      started_at:
+        type: datetime?
+        description: "Pickup started"
+
+      completed_at:
+        type: datetime?
+        description: "Pickup completed"
+
+      # =======================================================================
+      # Pickup Details
+      # =======================================================================
+      estimated_weight_kg:
+        type: decimal?
+        attributes: ["@precision(8,2)", "@non_negative"]
+        description: "Estimated weight"
+
+      actual_weight_kg:
+        type: decimal?
+        attributes: ["@precision(8,2)", "@non_negative"]
+        description: "Actual weight"
+
+      estimated_items:
+        type: int?
+        attributes: ["@non_negative"]
+        description: "Estimated items count"
+
+      actual_items:
+        type: int?
+        attributes: ["@non_negative"]
+        description: "Actual items count"
+
+      bag_count:
+        type: int
+        attributes: ["@default(0)", "@non_negative"]
+        description: "Number of bags"
+
+      bag_numbers:
+        type: json
+        attributes: ["@default('[]')"]
+        description: "Bag tracking numbers"
+
+      # =======================================================================
+      # Photos
+      # =======================================================================
+      photos:
+        type: json
+        attributes: ["@default('[]')"]
+        description: "Pickup photos"
+
+      # =======================================================================
+      # Proof
+      # =======================================================================
+      signature_url:
+        type: string?
+        attributes: ["@max(500)"]
+        description: "Customer signature"
+
+      signed_by:
+        type: string?
+        attributes: ["@max(100)"]
+        description: "Signed by (name)"
+
+      # =======================================================================
+      # Location Tracking
+      # =======================================================================
+      pickup_latitude:
+        type: float?
+        description: "Actual pickup location lat"
+
+      pickup_longitude:
+        type: float?
+        description: "Actual pickup location lng"
+
+      distance_from_address_meters:
+        type: int?
+        attributes: ["@non_negative"]
+        description: "Distance from address"
+
+      # =======================================================================
+      # Notes
+      # =======================================================================
+      customer_notes:
+        type: string?
+        attributes: ["@max(500)"]
+        description: "Customer instructions"
+
+      agent_notes:
+        type: string?
+        attributes: ["@max(500)"]
+        description: "Agent notes"
+
+      internal_notes:
+        type: string?
+        attributes: ["@max(500)"]
+        description: "Internal notes"
+
+      # =======================================================================
+      # Failed Pickup
+      # =======================================================================
+      failure_reason:
+        type: string?
+        attributes: ["@max(255)"]
+        description: "Failure reason"
+
+      failure_code:
+        type: string?
+        attributes: ["@max(30)"]
+        description: "Failure code"
+
+      # =======================================================================
+      # Reschedule
+      # =======================================================================
+      reschedule_count:
+        type: int
+        attributes: ["@default(0)", "@non_negative"]
+        description: "Times rescheduled"
+
+      original_scheduled_date:
+        type: date?
+        description: "Original scheduled date"
+
+      reschedule_reason:
+        type: string?
+        attributes: ["@max(255)"]
+        description: "Reschedule reason"
+
+      metadata:
+        type: Metadata
+        attributes: ["@audit_metadata"]
+        description: "Audit metadata (created_at, updated_at, deleted_at, created_by, updated_by, deleted_by)"
+
+    relations:
+      order:
+        type: Order
+        attributes: ["@one", "@foreign_key(order_id)"]
+        description: "Order"
+        inverse: pickup
+
+    indexes:
+      - type: unique
+        fields: [order_id]
+        where: "deleted_at IS NULL"
+      - type: index
+        fields: [agent_id, scheduled_date, status]
+      - type: index
+        fields: [status, scheduled_date]
+      - type: index
+        fields: [scheduled_date, status]

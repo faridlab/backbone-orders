@@ -1,0 +1,155 @@
+# =============================================================================
+# Domain: Orders
+# Entity: DeliveryTier
+# Description: Delivery speed tiers for order fulfillment
+# =============================================================================
+
+# =============================================================================
+# Models
+# =============================================================================
+
+models:
+  # ---------------------------------------------------------------------------
+  # DeliveryTier - Speed options for order delivery
+  # ---------------------------------------------------------------------------
+  - name: DeliveryTier
+    collection: delivery_tiers
+    description: "Delivery speed tiers for order fulfillment (Regular, Express, Kilat, Sihir)"
+
+    fields:
+      id:
+        type: uuid
+        attributes: ["@id", "@default(uuid)"]
+        description: "Unique tier identifier"
+
+      # =======================================================================
+      # Identification
+      # =======================================================================
+      code:
+        type: string
+        attributes: ["@required", "@unique", "@max(30)"]
+        description: "Tier code (e.g., regular, express, kilat, sihir)"
+
+      name:
+        type: string
+        attributes: ["@required", "@max(100)"]
+        description: "Display name (e.g., Regular, Express, Kilat, Sihir)"
+
+      name_en:
+        type: string?
+        attributes: ["@max(100)"]
+        description: "English name"
+
+      description:
+        type: string?
+        attributes: ["@max(500)"]
+        description: "Tier description"
+
+      # =======================================================================
+      # Duration
+      # =======================================================================
+      duration_hours:
+        type: int
+        attributes: ["@required", "@non_negative"]
+        description: "Processing duration in hours (72=3days, 48=2days, 24=1day, 6=6hours)"
+
+      duration_label:
+        type: string
+        attributes: ["@required", "@max(50)"]
+        description: "Human-readable duration (e.g., '3 days', '6 hours')"
+
+      # =======================================================================
+      # Display & UI
+      # =======================================================================
+      color:
+        type: string?
+        attributes: ["@max(20)"]
+        description: "Badge color (hex code for UI)"
+
+      icon:
+        type: string?
+        attributes: ["@max(50)"]
+        description: "Icon name/code"
+
+      is_urgent:
+        type: bool
+        attributes: ["@default(false)"]
+        description: "Highlighted as urgent in UI (bold text, special color)"
+
+      sort_order:
+        type: int
+        attributes: ["@default(0)"]
+        description: "Display order (lower = first)"
+
+      # =======================================================================
+      # Status
+      # =======================================================================
+      is_active:
+        type: bool
+        attributes: ["@default(true)"]
+        description: "Tier is available for selection"
+
+      is_default:
+        type: bool
+        attributes: ["@default(false)"]
+        description: "Default tier for new orders"
+
+      # =======================================================================
+      # Marketplace Scoping
+      # =======================================================================
+      # logical FK to bersihir.Provider.id
+      provider_id:
+        type: uuid?
+        attributes: ["@exclude_from_foreign_key_check"]
+        description: "Provider owner (null = platform default)"
+
+      # logical FK to bersihir.ProviderOutlet.id
+      outlet_id:
+        type: uuid?
+        attributes: ["@exclude_from_foreign_key_check"]
+        description: "Outlet owner (null = provider-level or platform)"
+
+      source_id:
+        type: uuid?
+        attributes: ["@foreign_key(DeliveryTier.id)"]
+        description: "Original tier ID when cloned from platform"
+
+      is_cloned:
+        type: bool
+        attributes: ["@default(false)"]
+        description: "True if this is a cloned copy from a platform tier"
+
+      metadata:
+        type: Metadata
+        attributes: ["@audit_metadata"]
+        description: "Audit metadata (created_at, updated_at, deleted_at, created_by, updated_by, deleted_by)"
+
+    relations:
+      orders:
+        type: Order[]
+        attributes: ["@one_to_many"]
+        description: "Orders using this tier"
+        inverse: delivery_tier
+
+    indexes:
+      - type: unique
+        fields: [code]
+        where: "(metadata->>'deleted_at') IS NULL AND provider_id IS NULL AND outlet_id IS NULL"
+        description: "Platform-level codes are globally unique"
+      - type: unique
+        fields: [provider_id, outlet_id, code]
+        description: "Same code allowed across different provider+outlet combinations"
+      - type: index
+        fields: [provider_id, outlet_id, is_active]
+      - type: index
+        fields: [outlet_id, is_active, sort_order]
+      - type: index
+        fields: [source_id, is_cloned]
+      - type: index
+        fields: [is_active, sort_order]
+      - type: index
+        fields: [provider_id, is_active, sort_order]
+      - type: index
+        fields: [is_default]
+      - type: index
+        fields: [duration_hours]

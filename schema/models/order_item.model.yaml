@@ -1,0 +1,233 @@
+# =============================================================================
+# Module: Orders
+# Entity: OrderItem
+# Description: Individual laundry items within an order
+# =============================================================================
+
+# =============================================================================
+# Enums
+# =============================================================================
+
+enums:
+  - name: ItemCondition
+    description: "Item condition on receipt"
+    variants:
+      - name: good
+        description: "Good condition"
+        default: true
+      - name: stained
+        description: "Has stains"
+      - name: damaged
+        description: "Pre-existing damage"
+      - name: worn
+        description: "Worn/faded"
+
+  - name: ItemProcessingStatus
+    description: "Item processing status"
+    variants:
+      - name: pending
+        description: "Pending processing"
+        default: true
+      - name: washing
+        description: "In washing"
+      - name: drying
+        description: "In drying"
+      - name: ironing
+        description: "In ironing"
+      - name: folding
+        description: "In folding"
+      - name: quality_check
+        description: "Quality check"
+      - name: ready
+        description: "Ready"
+      - name: delivered
+        description: "Delivered"
+      - name: problem
+        description: "Has problem"
+
+  - name: UnitType
+    description: "How service is priced"
+    variants:
+      - name: per_kg
+        description: "Price per kilogram"
+        default: true
+      - name: per_item
+        description: "Price per item"
+      - name: per_piece
+        description: "Price per piece"
+      - name: flat_rate
+        description: "Flat rate regardless of quantity"
+      - name: tiered
+        description: "Tiered pricing based on quantity"
+      - name: per_set
+        description: "Per set"
+      - name: per_pair
+        description: "Per pair"
+      - name: per_sqm
+        description: "Per square meter"
+      - name: other
+        description: "Other"
+
+# =============================================================================
+# Models
+# =============================================================================
+
+models:
+  - name: OrderItem
+    collection: order_items
+    soft_delete: true
+    description: "Individual item in laundry order"
+    config:
+      generators:
+        disabled: [handler, usecase, cqrs, projection, bulk-operations]
+
+    fields:
+      id:
+        type: uuid
+        attributes: ["@id", "@default(uuid)"]
+        description: "Unique order item identifier"
+
+      order_id:
+        type: uuid
+        attributes: ["@required", "@foreign_key(Order.id)"]
+        description: "Parent order"
+
+      # =======================================================================
+      # Service
+      # =======================================================================
+      # logical FK to bersihir.ProviderService.id
+      service_id:
+        type: uuid?
+        attributes: ["@exclude_from_foreign_key_check"]
+        description: "Service applied (join for name, category, pricing type)"
+
+      # =======================================================================
+      # Item Details
+      # =======================================================================
+      item_name:
+        type: string?
+        attributes: ["@max(100)"]
+        description: "Item name (for satuan/per-piece orders)"
+
+      # =======================================================================
+      # Quantity
+      # =======================================================================
+      quantity:
+        type: int
+        attributes: ["@default(1)", "@positive"]
+        description: "Quantity"
+
+      unit_type:
+        type: UnitType
+        attributes: ["@required", "@default(per_kg)"]
+        description: "Unit of measure for quantity (per_kg, per_item, per_piece, etc.)"
+
+      # =======================================================================
+      # Pricing (snapshot at time of order)
+      # =======================================================================
+      unit_price:
+        type: decimal
+        attributes: ["@required", "@precision(12,2)", "@non_negative"]
+        description: "Unit price"
+
+      subtotal:
+        type: decimal
+        attributes: ["@required", "@precision(12,2)", "@non_negative"]
+        description: "Subtotal (unit × quantity)"
+
+      discount:
+        type: decimal
+        attributes: ["@default(0)", "@precision(12,2)", "@non_negative"]
+        description: "Discount amount"
+
+      addon_total:
+        type: decimal
+        attributes: ["@default(0)", "@precision(12,2)", "@non_negative"]
+        description: "Add-ons total"
+
+      total:
+        type: decimal
+        attributes: ["@required", "@precision(12,2)", "@non_negative"]
+        description: "Total (subtotal - discount + addons)"
+
+      currency:
+        type: string
+        attributes: ["@default('IDR')", "@length(3)"]
+        description: "Currency"
+
+      # =======================================================================
+      # Add-ons
+      # =======================================================================
+      addons:
+        type: json
+        attributes: ["@default('[]')"]
+        description: "Applied add-ons [{id, name, price}]"
+
+      # =======================================================================
+      # Condition
+      # =======================================================================
+      condition_on_receipt:
+        type: ItemCondition
+        attributes: ["@default(good)"]
+        description: "Condition when received"
+
+      condition_notes:
+        type: string?
+        attributes: ["@max(500)"]
+        description: "Condition details (stains, damage, wear)"
+
+      # =======================================================================
+      # Processing
+      # =======================================================================
+      processing_status:
+        type: ItemProcessingStatus
+        attributes: ["@default(pending)"]
+        description: "Processing status (problem state for QC failures)"
+
+      special_instructions:
+        type: string?
+        attributes: ["@max(500)"]
+        description: "Special handling instructions"
+
+      processing_notes:
+        type: string?
+        attributes: ["@max(500)"]
+        description: "Processing notes (includes QC and problem details)"
+
+      delivery_tier_id:
+        type: uuid?
+        attributes: ["@foreign_key(DeliveryTier.id)"]
+        description: "Delivery tier for this item (per-item tier selection)"
+
+      started_at:
+        type: datetime?
+        description: "Processing started"
+
+      completed_at:
+        type: datetime?
+        description: "Processing completed"
+
+      metadata:
+        type: Metadata
+        attributes: ["@audit_metadata"]
+        description: "Audit metadata (created_at, updated_at, deleted_at, created_by, updated_by, deleted_by)"
+
+    relations:
+      order:
+        type: Order
+        attributes: ["@one", "@foreign_key(order_id)"]
+        description: "Parent order"
+        inverse: items
+
+      delivery_tier:
+        type: DeliveryTier?
+        attributes: ["@one", "@foreign_key(delivery_tier_id)"]
+        description: "Delivery tier for this item"
+
+    indexes:
+      - type: index
+        fields: [order_id, processing_status]
+      - type: index
+        fields: [order_id, service_id]
+      - type: index
+        fields: [delivery_tier_id]

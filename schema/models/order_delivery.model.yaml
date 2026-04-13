@@ -1,0 +1,447 @@
+# =============================================================================
+# Module: Orders
+# Entity: OrderDelivery
+# Description: Delivery details and proof for orders
+# =============================================================================
+
+external_imports:
+  - module: sapiens
+    types: [User]
+
+# =============================================================================
+# Enums
+# =============================================================================
+
+enums:
+  - name: DeliveryStatus
+    description: "Delivery status"
+    variants:
+      - name: pending
+        description: "Pending"
+        default: true
+      - name: scheduled
+        description: "Delivery scheduled"
+      - name: assigned
+        description: "Agent assigned"
+      - name: preparing
+        description: "Preparing for delivery"
+      - name: dispatched
+        description: "Dispatched"
+      - name: en_route
+        description: "En route"
+      - name: arrived
+        description: "Arrived at destination"
+      - name: delivering
+        description: "Delivering"
+      - name: delivered
+        description: "Delivered"
+      - name: failed
+        description: "Failed delivery"
+      - name: returned
+        description: "Returned to outlet"
+      - name: rescheduled
+        description: "Rescheduled"
+      - name: cancelled
+        description: "Cancelled"
+
+  - name: DeliveryType
+    description: "Type of delivery"
+    variants:
+      - name: scheduled
+        description: "Scheduled delivery"
+        default: true
+      - name: express
+        description: "Express delivery"
+      - name: same_day
+        description: "Same day delivery"
+      - name: self_pickup
+        description: "Customer self-pickup"
+
+# =============================================================================
+# Models
+# =============================================================================
+
+models:
+  - name: OrderDelivery
+    collection: order_deliveries
+    description: "Order delivery details"
+    config:
+      generators:
+        disabled: [handler, usecase, cqrs, projection, bulk-operations]
+
+    fields:
+      id:
+        type: uuid
+        attributes: ["@id", "@default(uuid)"]
+        description: "Unique delivery identifier"
+
+      order_id:
+        type: uuid
+        attributes: ["@required", "@foreign_key(Order.id)"]
+        description: "Order reference"
+
+      # =======================================================================
+      # Type
+      # =======================================================================
+      delivery_type:
+        type: DeliveryType
+        attributes: ["@default(scheduled)"]
+        description: "Type of delivery"
+
+      # =======================================================================
+      # Schedule
+      # =======================================================================
+      scheduled_date:
+        type: date
+        attributes: ["@required"]
+        description: "Scheduled delivery date"
+
+      scheduled_time_start:
+        type: string?
+        attributes: ["@max(5)"]
+        description: "Scheduled time start (HH:MM)"
+
+      scheduled_time_end:
+        type: string?
+        attributes: ["@max(5)"]
+        description: "Scheduled time end (HH:MM)"
+
+      time_slot:
+        type: string?
+        attributes: ["@max(30)"]
+        description: "Time slot name"
+
+      # =======================================================================
+      # Customer Requested Schedule
+      # =======================================================================
+      customer_requested_date:
+        type: date?
+        description: "Customer originally requested delivery date"
+
+      customer_requested_time_start:
+        type: string?
+        attributes: ["@max(5)"]
+        description: "Customer requested delivery time start (HH:MM)"
+
+      customer_requested_time_end:
+        type: string?
+        attributes: ["@max(5)"]
+        description: "Customer requested delivery time end (HH:MM)"
+
+      # =======================================================================
+      # Address
+      # =======================================================================
+      # logical FK to bersihir.Address.id
+      address_id:
+        type: uuid?
+        attributes: ["@exclude_from_foreign_key_check"]
+        description: "Customer address reference"
+
+      address_line:
+        type: string
+        attributes: ["@required", "@max(255)"]
+        description: "Delivery address"
+
+      address_detail:
+        type: string?
+        attributes: ["@max(255)"]
+        description: "Address details"
+
+      landmark:
+        type: string?
+        attributes: ["@max(100)"]
+        description: "Nearby landmark"
+
+      latitude:
+        type: float?
+        description: "Delivery latitude"
+
+      longitude:
+        type: float?
+        description: "Delivery longitude"
+
+      # =======================================================================
+      # Contact
+      # =======================================================================
+      contact_name:
+        type: string
+        attributes: ["@required", "@max(100)"]
+        description: "Contact person name"
+
+      contact_phone:
+        type: string
+        attributes: ["@required", "@max(20)"]
+        description: "Contact phone"
+
+      contact_phone_alt:
+        type: string?
+        attributes: ["@max(20)"]
+        description: "Alternative phone"
+
+      # =======================================================================
+      # Agent Assignment
+      # =======================================================================
+      # logical FK to bersihir.Agent.id
+      agent_id:
+        type: uuid?
+        attributes: ["@exclude_from_foreign_key_check"]
+        description: "Assigned agent"
+
+      agent_name:
+        type: string?
+        attributes: ["@max(100)"]
+        description: "Agent name"
+
+      agent_phone:
+        type: string?
+        attributes: ["@max(20)"]
+        description: "Agent phone"
+
+      assigned_at:
+        type: datetime?
+        description: "Assignment timestamp"
+
+      # =======================================================================
+      # Status
+      # =======================================================================
+      status:
+        type: DeliveryStatus
+        attributes: ["@default(pending)"]
+        description: "Delivery status"
+
+      # =======================================================================
+      # Timestamps
+      # =======================================================================
+      dispatched_at:
+        type: datetime?
+        description: "Dispatched timestamp"
+
+      en_route_at:
+        type: datetime?
+        description: "En route timestamp"
+
+      arrived_at:
+        type: datetime?
+        description: "Arrived timestamp"
+
+      delivered_at:
+        type: datetime?
+        description: "Delivered timestamp"
+
+      # =======================================================================
+      # Delivery Details
+      # =======================================================================
+      item_count:
+        type: int
+        attributes: ["@default(0)", "@non_negative"]
+        description: "Number of items"
+
+      bag_count:
+        type: int
+        attributes: ["@default(0)", "@non_negative"]
+        description: "Number of bags"
+
+      bag_numbers:
+        type: json
+        attributes: ["@default('[]')"]
+        description: "Bag tracking numbers"
+
+      # =======================================================================
+      # Verification
+      # =======================================================================
+      verification_method:
+        type: string?
+        attributes: ["@max(30)"]
+        description: "Verification method (otp, signature, photo)"
+
+      verification_code:
+        type: string?
+        attributes: ["@max(10)"]
+        description: "OTP/verification code"
+
+      verified_at:
+        type: datetime?
+        description: "Verification timestamp"
+
+      # =======================================================================
+      # Photos
+      # =======================================================================
+      photos:
+        type: json
+        attributes: ["@default('[]')"]
+        description: "Delivery photos"
+
+      proof_photo_url:
+        type: string?
+        attributes: ["@max(500)"]
+        description: "Proof of delivery photo"
+
+      # =======================================================================
+      # Signature
+      # =======================================================================
+      signature_url:
+        type: string?
+        attributes: ["@max(500)"]
+        description: "Recipient signature"
+
+      signed_by:
+        type: string?
+        attributes: ["@max(100)"]
+        description: "Signed by (name)"
+
+      relation_to_customer:
+        type: string?
+        attributes: ["@max(50)"]
+        description: "Relation to customer"
+
+      # =======================================================================
+      # Location Tracking
+      # =======================================================================
+      delivery_latitude:
+        type: float?
+        description: "Actual delivery location lat"
+
+      delivery_longitude:
+        type: float?
+        description: "Actual delivery location lng"
+
+      distance_from_address_meters:
+        type: int?
+        attributes: ["@non_negative"]
+        description: "Distance from address"
+
+      # =======================================================================
+      # Fees
+      # =======================================================================
+      delivery_fee:
+        type: decimal
+        attributes: ["@default(0)", "@precision(12,2)", "@non_negative"]
+        description: "Delivery fee"
+
+      express_fee:
+        type: decimal
+        attributes: ["@default(0)", "@precision(12,2)", "@non_negative"]
+        description: "Express fee"
+
+      total_fee:
+        type: decimal
+        attributes: ["@default(0)", "@precision(12,2)", "@non_negative"]
+        description: "Total delivery fee"
+
+      currency:
+        type: string
+        attributes: ["@default('IDR')", "@length(3)"]
+        description: "Currency"
+
+      # =======================================================================
+      # COD
+      # =======================================================================
+      is_cod:
+        type: bool
+        attributes: ["@default(false)"]
+        description: "Is cash on delivery"
+
+      cod_amount:
+        type: decimal?
+        attributes: ["@precision(12,2)", "@non_negative"]
+        description: "COD amount"
+
+      cod_collected:
+        type: bool
+        attributes: ["@default(false)"]
+        description: "COD collected"
+
+      cod_collected_at:
+        type: datetime?
+        description: "COD collection timestamp"
+
+      # =======================================================================
+      # Notes
+      # =======================================================================
+      customer_notes:
+        type: string?
+        attributes: ["@max(500)"]
+        description: "Customer instructions"
+
+      agent_notes:
+        type: string?
+        attributes: ["@max(500)"]
+        description: "Agent notes"
+
+      internal_notes:
+        type: string?
+        attributes: ["@max(500)"]
+        description: "Internal notes"
+
+      # =======================================================================
+      # Failed Delivery
+      # =======================================================================
+      failure_reason:
+        type: string?
+        attributes: ["@max(255)"]
+        description: "Failure reason"
+
+      failure_code:
+        type: string?
+        attributes: ["@max(30)"]
+        description: "Failure code"
+
+      attempt_count:
+        type: int
+        attributes: ["@default(1)", "@positive"]
+        description: "Delivery attempt number"
+
+      # =======================================================================
+      # Reschedule
+      # =======================================================================
+      reschedule_count:
+        type: int
+        attributes: ["@default(0)", "@non_negative"]
+        description: "Times rescheduled"
+
+      original_scheduled_date:
+        type: date?
+        description: "Original scheduled date"
+
+      reschedule_reason:
+        type: string?
+        attributes: ["@max(255)"]
+        description: "Reschedule reason"
+
+      # =======================================================================
+      # Rating
+      # =======================================================================
+      delivery_rating:
+        type: int?
+        attributes: ["@range(1, 5)"]
+        description: "Delivery rating"
+
+      rating_comment:
+        type: string?
+        attributes: ["@max(500)"]
+        description: "Rating comment"
+
+      metadata:
+        type: Metadata
+        attributes: ["@audit_metadata"]
+        description: "Audit metadata (created_at, updated_at, deleted_at, created_by, updated_by, deleted_by)"
+
+    relations:
+      order:
+        type: Order
+        attributes: ["@one", "@foreign_key(order_id)"]
+        description: "Order"
+        inverse: delivery
+
+    indexes:
+      - type: unique
+        fields: [order_id]
+        where: "deleted_at IS NULL"
+      - type: index
+        fields: [agent_id, scheduled_date, status]
+      - type: index
+        fields: [status, scheduled_date]
+      - type: index
+        fields: [scheduled_date, status]
+      - type: index
+        fields: [is_cod, cod_collected]
