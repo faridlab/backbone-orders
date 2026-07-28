@@ -1,5 +1,13 @@
 # Orders Module
 
+> ⏸️ **DORMANT SKELETON — not in the build.** This module is an unbuilt extraction from *bersihir*:
+> the 7 schema model YAMLs (`schema/models/`) are the design IP, but **no `src/` and no `migrations/`
+> have been generated** and it is **not registered in `metaphor.yaml`** — so `metaphor` tooling ignores
+> it and nothing in the workspace depends on it. It is intentionally parked (2026-07-28): revive by
+> running `metaphor schema generate` (clean — no existing src to wipe) and registering it in
+> `metaphor.yaml` when a consumer is actually imminent. Do not assume the `src/` layout documented
+> below exists; it describes the *target* shape post-generation.
+
 A complete Domain-Driven Design (DDD) bounded context module built on the **Backbone Framework**. This module follows Clean Architecture principles with a **schema-first** approach where YAML schema files are the single source of truth.
 
 ## Architecture Overview
