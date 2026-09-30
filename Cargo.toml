@@ -3,6 +3,7 @@ name = "backbone-orders"
 version = "0.1.14"
 edition = "2021"
 description = "Order workflow with pickups, deliveries, status timeline (extracted from bersihir)"
+license = "MIT OR Apache-2.0"
 
 [lib]
 path = "src/lib.rs"
